@@ -266,6 +266,29 @@ func handleRequest(req api.Request, res api.Response) (next bool, reqCtx uint32)
 		return
 	}
 
+	// https://github.com/jcchavezs/coraza-http-wasm-traefik/issues/8#issuecomment-2449185464
+	if tx.IsRequestBodyAccessible() {
+		// We only have to rewrite the body when we read it before
+		
+		rbr, err := tx.RequestBodyReader()
+	
+		if err != nil {
+			tx.DebugLogger().Error().Err(err).Msg("failed to get the request body reader")
+			return
+		}
+		// Adds all remaining bytes beyond the coraza limit to its buffer
+		// It happens when the partial body has been processed and it did not trigger an interruption
+		reader := readWriterTo{req.Body()}
+		bodyReader := io.MultiReader(rbr, reader)
+		body, err := io.ReadAll(bodyReader)
+	
+		if err != nil {
+			tx.DebugLogger().Error().Err(err).Msg("failed to read request body")
+		}
+	
+		readWriterTo{req.Body()}.Write(body)
+	}
+
 	reqCtx = rand.Uint32()
 	txs[reqCtx] = tx
 	return true, reqCtx
